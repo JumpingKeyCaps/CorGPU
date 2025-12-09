@@ -197,23 +197,23 @@ viewModelScope.launch {
 
 ### AGSL Shader Example (Conceptual)
 ```glsl
-// matrix_multiply.agsl
+// matrix_multiply_half.agsl
 uniform shader inputA;
 uniform shader inputB;
-uniform float matrixSize;
+uniform half matrixSize; // matrixSize en half
 
-vec4 main(vec2 fragCoord) {
+half4 main(half2 fragCoord) {
     int row = int(fragCoord.y);
     int col = int(fragCoord.x);
+    half sum = 0.0h; // Utilisation du suffixe 'h' pour les littéraux half
     
-    float sum = 0.0;
     for (int k = 0; k < int(matrixSize); k++) {
-        float a = inputA.eval(vec2(k, row)).r;
-        float b = inputB.eval(vec2(col, k)).r;
+        // .eval() échantillonne l'entrée, elle retourne un vec4 (ou half4 si optimisé)
+        half a = inputA.eval(half2(half(k), half(row))).r;
+        half b = inputB.eval(half2(half(col), half(k))).r;
         sum += a * b;
     }
-    
-    return vec4(sum, 0.0, 0.0, 1.0);
+    return half4(sum, 0.0h, 0.0h, 1.0h);
 }
 ```
 
