@@ -309,19 +309,6 @@ half4 main(half2 fragCoord) {
 - [ ] Test GPU pipeline (chained operations)
 - [ ] Profile memory allocations
 
-### Phase 3: Exploration
-- [ ] Compare with RenderScript (deprecated but baseline)
-- [ ] Explore Vulkan compute shaders (more control)
-- [ ] Add real-time CPU/GPU usage graphs
-- [ ] Measure power consumption (if API available)
-- [ ] Test FFT, physics simulation, audio DSP
-
-### Documentation
-- [ ] Document crossover points with graphs
-- [ ] Write blog post on findings
-- [ ] Create architecture decision records (ADRs)
-- [ ] Share performance profiles
-
 ---
 
 ## Key Takeaways
