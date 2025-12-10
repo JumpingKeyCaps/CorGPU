@@ -1,4 +1,4 @@
-package com.lebaillyapp.corgpu.benchmark.model
+package com.lebaillyapp.corgpu.benchmark.domain.model
 
 /**
  * États possibles de l'écran de benchmark

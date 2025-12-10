@@ -1,4 +1,8 @@
-package com.lebaillyapp.corgpu.benchmark.model
+package com.lebaillyapp.corgpu.benchmark.domain.model
+
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Résultat d'un benchmark de multiplication de matrices
@@ -58,7 +62,7 @@ data class MatrixBenchmarkResult(
     }
 
     private fun formatTimestamp(): String {
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-        return sdf.format(java.util.Date(timestamp))
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        return sdf.format(Date(timestamp))
     }
 }
