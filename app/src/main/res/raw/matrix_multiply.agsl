@@ -1,0 +1,31 @@
+// Matrix multiplication shader using AGSL (Android Graphics Shading Language)
+// Calcule C = A × B où toutes les matrices sont N×N
+
+uniform shader inputA;      // Matrice A (encodée en texture)
+uniform shader inputB;      // Matrice B (encodée en texture)
+uniform float matrixSize;   // Taille N des matrices
+
+// Fonction principale appelée pour chaque pixel de sortie
+// fragCoord.x = colonne, fragCoord.y = ligne
+half4 main(float2 fragCoord) {
+    int row = int(fragCoord.y);
+    int col = int(fragCoord.x);
+
+    // Accumulation du produit scalaire ligne × colonne
+    float sum = 0.0;
+
+    int n = int(matrixSize);
+    for (int k = 0; k < n; k++) {
+        // Lire A[row][k] - coordonnée (k, row)
+        float a = inputA.eval(vec2(float(k) + 0.5, float(row) + 0.5)).r;
+
+        // Lire B[k][col] - coordonnée (col, k)
+        float b = inputB.eval(vec2(float(col) + 0.5, float(k) + 0.5)).r;
+
+        sum += a * b;
+    }
+
+    // Retourner le résultat dans le canal rouge
+    // Les autres canaux sont ignorés mais requis par AGSL
+    return half4(sum, 0.0, 0.0, 1.0);
+}
