@@ -203,12 +203,12 @@ viewModelScope.launch {
 // matrix_multiply_half.agsl
 uniform shader inputA;
 uniform shader inputB;
-uniform half matrixSize; // matrixSize en half
+uniform float matrixSize;
 
 half4 main(half2 fragCoord) {
     int row = int(fragCoord.y);
     int col = int(fragCoord.x);
-    half sum = 0.0h; // Utilisation du suffixe 'h' pour les littéraux half
+    half sum = 0.0h; 
     
     for (int k = 0; k < int(matrixSize); k++) {
         // .eval() échantillonne l'entrée, elle retourne un vec4 (ou half4 si optimisé)
@@ -300,10 +300,10 @@ half4 main(half2 fragCoord) {
 
 ### Phase 1: Core Implementation
 - [x] Document architecture and rationale
-- [ ] Implement CPU-only matrix multiplication with coroutines
-- [ ] Implement AGSL shader for matrix multiplication
-- [ ] Build Compose UI with side-by-side comparison
-- [ ] Add adjustable matrix size slider (64 → 1024)
+- [x] Implement CPU-only matrix multiplication with coroutines
+- [x] Implement AGSL shader for matrix multiplication
+- [x] Build Compose UI with side-by-side comparison
+- [x] Add adjustable matrix size slider (64 → 1024)
 
 ### Phase 2: Advanced Benchmarking
 - [ ] Measure breakdown: CPU time, GPU compute, transfer overhead
