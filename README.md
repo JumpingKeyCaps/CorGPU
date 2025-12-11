@@ -10,16 +10,20 @@ A demonstration Android project exploring **GPGPU (General-Purpose computing on 
 
 ## Motivation
 
-**The Problem**: Kotlin Coroutines excel at orchestration and concurrency, but CPU dispatchers hit hard limits:
+### **The Problem** 
+Kotlin Coroutines excel at orchestration and concurrency, but CPU dispatchers hit hard limits:
 - `Dispatchers.Default` caps at available CPU cores (~4-12 threads)
 - Custom dispatchers with 64+ threads cause severe context-switching overhead
 - CPU-bound parallel tasks scale poorly beyond core count
 
-**The Hypothesis**: Can i use coroutines as a **coordination layer** while offloading heavy computation to GPU threads via **GPGPU techniques**, combining the best of both worlds?
+### **The Hypothesis**
+Can i use coroutines as a **coordination layer** while offloading heavy computation to GPU threads via **GPGPU techniques**, combining the best of both worlds?
 
-**The Reality**: GPU "coroutines" don't exist (no suspend/resume on shader threads), but we can orchestrate **GPGPU compute** through standard coroutines, achieving massive parallelism (1000s of parallel threads) for the right workloads.
+### **The Reality**
+GPU "coroutines" don't exist (no suspend/resume on shader threads), but we can orchestrate **GPGPU compute** through standard coroutines, achieving massive parallelism (1000s of parallel threads) for the right workloads.
 
-**The Approach**: I leverage Android's **AGSL (Android Graphics Shading Language)** to perform general-purpose computations on the GPU. By repurposing fragment shaders as compute kernels, i achieve true GPGPU capabilities on Android 13+ devices without needing Vulkan Compute or deprecated RenderScript.
+### **The Approach**
+I leverage Android's **AGSL (Android Graphics Shading Language)** to perform general-purpose computations on the GPU. By repurposing fragment shaders as compute kernels, i achieve true GPGPU capabilities on Android 13+ devices without needing Vulkan Compute or deprecated RenderScript.
 
 ---
 
