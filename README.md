@@ -48,6 +48,34 @@ Coroutines orchestrate workflow on CPU while GPU executes massively parallel com
 
 ---
 
+## Is This "Real" GPGPU?
+
+### **No.** This is a pragmatic hack.
+
+We're abusing fragment shaders (designed to paint pixels) to perform 
+matrix multiplication by:
+1. Encoding matrices as grayscale bitmaps (losing precision)
+2. Treating the GPU like a painter who can do math
+3. Decoding the painted result back to numbers
+
+### **Why not use "real" GPU compute (Vulkan)?**
+
+Because that requires 500+ lines of NDK/C++ boilerplate, manual memory 
+management, and debugging nightmares that make you question your career 
+choices.
+
+### **Why not use RenderScript?**
+
+Google killed it. RIP 2011-2021. 
+
+### **So what is this?**
+
+A demonstration that sometimes the "wrong" tool used cleverly beats 
+the "right" tool used painfully. Getting 80% of Vulkan's 
+performance with 5% of its complexity.
+
+---
+
 ## Technical Deep-Dive
 
 ### Kotlin Coroutines Fundamentals
