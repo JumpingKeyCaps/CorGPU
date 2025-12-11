@@ -48,10 +48,10 @@ class MatrixBenchmarkViewModel(application: Application) : AndroidViewModel(appl
                 // Calcul mémoire allouée (approximatif)
                 val memoryMb = (matrixSize * matrixSize * 4 * 3) / (1024f * 1024f) // 3 matrices float32
 
-                // Benchmark CPU (coroutines pures)
+                // Benchmark CPU (coroutines avec async)
                 val cpuTime = benchmarkCpu(matrixA, matrixB)
 
-                // Benchmark GPU (coroutines + GPU)
+                // Benchmark GPU (coroutines + GPU avec async)
                 val (gpuTotalTime, gpuComputeTime) = benchmarkGpu(matrixA, matrixB)
 
                 // Créer le résultat
@@ -82,34 +82,42 @@ class MatrixBenchmarkViewModel(application: Application) : AndroidViewModel(appl
     }
 
     /**
-     * Benchmark CPU : Multiplication naive en triple boucle avec coroutines
+     * Benchmark CPU : Multiplication naive en triple boucle avec async
+     * Utilise async pour comparaison équitable avec l'approche GPU
      */
     private suspend fun benchmarkCpu(
         matrixA: Array<FloatArray>,
         matrixB: Array<FloatArray>
     ): Long = withContext(Dispatchers.Default) {
-        val size = matrixA.size
         val startTime = System.nanoTime()
 
-        // Multiplication matricielle naive O(n³)
-        val result = Array(size) { FloatArray(size) }
+        // Utiliser async pour orchestration similaire au GPU
+        val deferred = async {
+            val size = matrixA.size
+            val result = Array(size) { FloatArray(size) }
 
-        for (i in 0 until size) {
-            for (j in 0 until size) {
-                var sum = 0f
-                for (k in 0 until size) {
-                    sum += matrixA[i][k] * matrixB[k][j]
+            // Multiplication matricielle naive O(n³)
+            for (i in 0 until size) {
+                for (j in 0 until size) {
+                    var sum = 0f
+                    for (k in 0 until size) {
+                        sum += matrixA[i][k] * matrixB[k][j]
+                    }
+                    result[i][j] = sum
                 }
-                result[i][j] = sum
             }
+            result
         }
+
+        // Attendre le résultat (comme pour GPU)
+        deferred.await()
 
         val endTime = System.nanoTime()
         return@withContext (endTime - startTime) / 1_000_000 // Convertir en ms
     }
 
     /**
-     * Benchmark GPU : Délégation au shader via coroutines
+     * Benchmark GPU : Délégation au shader via async
      * Retourne (temps total, temps compute seul)
      */
     private suspend fun benchmarkGpu(
