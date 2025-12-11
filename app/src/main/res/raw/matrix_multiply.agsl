@@ -1,5 +1,7 @@
 // Matrix multiplication shader using AGSL (Android Graphics Shading Language)
 // Calcule C = A × B où toutes les matrices sont N×N
+// Entrées: matrices avec valeurs dans [0, 1]
+// Sortie: matrice normalisée par matrixSize pour rester dans [0, 1]
 
 uniform shader inputA;      // Matrice A (encodée en texture)
 uniform shader inputB;      // Matrice B (encodée en texture)
@@ -25,7 +27,12 @@ half4 main(float2 fragCoord) {
         sum += a * b;
     }
 
-    // Retourner le résultat dans le canal rouge
+    // Normaliser le résultat par matrixSize pour garder dans [0, 1]
+    // Pour matrices d'entrée dans [0, 1], le résultat brut peut aller jusqu'à N
+    // En divisant par N, on ramène dans [0, 1] pour l'encodage 8-bit
+    float normalized = sum / matrixSize;
+
+    // Retourner le résultat normalisé dans le canal rouge
     // Les autres canaux sont ignorés mais requis par AGSL
-    return half4(sum, 0.0, 0.0, 1.0);
+    return half4(normalized, 0.0, 0.0, 1.0);
 }
