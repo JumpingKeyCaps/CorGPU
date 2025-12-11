@@ -2,21 +2,28 @@
 ![Kotlin](https://img.shields.io/badge/Kotlin-1.9-blue)
 ![Android](https://img.shields.io/badge/Android-13%2B-green)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-UI-blueviolet)
+![GPGPU](https://img.shields.io/badge/GPGPU-AGSL-orange)
 
-A demonstration Android project exploring the **performance boundaries between CPU-bound Kotlin Coroutines and GPU-accelerated computation via AGSL shaders**. This project investigates when and how to leverage GPU parallelism through coroutine orchestration for compute-intensive tasks.
+A demonstration Android project exploring **GPGPU (General-Purpose computing on GPU)** via AGSL shaders to push Kotlin Coroutines beyond their CPU-bound limitations. This project investigates how to supercharge coroutine performance by leveraging GPU parallelism for compute-intensive tasks, exploring the boundaries of coroutine-orchestrated GPU acceleration.
 
 ---
 
 ## Motivation
 
-**The Problem**: Kotlin Coroutines excel at orchestration and concurrency, but CPU dispatchers hit hard limits:
+### **The Problem** 
+Kotlin Coroutines excel at orchestration and concurrency, but CPU dispatchers hit hard limits:
 - `Dispatchers.Default` caps at available CPU cores (~4-12 threads)
 - Custom dispatchers with 64+ threads cause severe context-switching overhead
 - CPU-bound parallel tasks scale poorly beyond core count
 
-**The Hypothesis**: Can we use coroutines as a **coordination layer** while offloading heavy computation to GPU threads, combining the best of both worlds?
+### **The Hypothesis**
+Can we use coroutines as a **coordination layer** while offloading heavy computation to GPU threads via **GPGPU techniques**, combining the best of both worlds?
 
-**The Reality**: GPU "coroutines" don't exist (no suspend/resume on shader threads), but we can orchestrate GPU compute through standard coroutines, achieving massive parallelism for the right workloads.
+### **The Reality**
+GPU "coroutines" don't exist (no suspend/resume on shader threads), but we can orchestrate **GPGPU compute** through standard coroutines, achieving massive parallelism (1000s of parallel threads) for the right workloads.
+
+### **The Approach**
+I leverage Android's **AGSL (Android Graphics Shading Language)** to perform general-purpose computations on the GPU. By repurposing fragment shaders as compute kernels, i achieve true GPGPU capabilities on Android 13+ devices without needing Vulkan Compute or deprecated RenderScript.
 
 ---
 
@@ -151,71 +158,79 @@ Coroutines orchestrate workflow on CPU while GPU executes massively parallel com
 
 ## Implementation Examples
 
-### CPU-Only Matrix Multiplication
+### CPU + GPU Benchmark Comparison
 ```kotlin
-// Baseline: Pure CPU coroutines
-viewModelScope.launch(Dispatchers.Default) {
-    val start = System.nanoTime()
-    
-    // Naive triple-loop O(n³)
-    val result = Array(size) { FloatArray(size) }
-    for (i in 0 until size) {
-        for (j in 0 until size) {
-            var sum = 0f
-            for (k in 0 until size) {
-                sum += matrixA[i][k] * matrixB[k][j]
-            }
-            result[i][j] = sum
-        }
-    }
-    
-    val duration = (System.nanoTime() - start) / 1_000_000
-    _cpuTimeLiveData.postValue(duration)
-    _resultLiveData.postValue(result)
-}
-```
-
-### Hybrid Coroutine + GPU
-```kotlin
-// GPU-accelerated via AGSL shader
+// Dans le ViewModel
 viewModelScope.launch {
+    _state.value = Computing(matrixSize)
+    
+    val matrixA = generateRandomMatrix(matrixSize)
+    val matrixB = generateRandomMatrix(matrixSize)
+    
+    // Benchmark CPU avec async pour orchestration équitable
+    val cpuTime = benchmarkCpu(matrixA, matrixB)
+    
+    // Benchmark GPU avec async pour orchestration
+    val (gpuTotalTime, gpuComputeTime) = benchmarkGpu(matrixA, matrixB)
+    
+    // Comparer les résultats
+    val speedup = cpuTime.toFloat() / gpuTotalTime.toFloat()
+    
+    _state.value = Success(result)
+}
+
+// CPU Benchmark utilise async pour cohérence
+private suspend fun benchmarkCpu(...): Long = withContext(Dispatchers.Default) {
     val start = System.nanoTime()
-    
-    // Offload to GPU while coroutine suspends (non-blocking)
-    val deferred = async(Dispatchers.Default) {
-        multiplyMatricesGpu(matrixA, matrixB)
+    val deferred = async {
+        // Triple loop O(n³)
+        multiplyMatricesCpu(matrixA, matrixB)
     }
-    
-    // Main thread remains free here
-    val result = deferred.await() // Suspends until GPU finishes
-    
-    val duration = (System.nanoTime() - start) / 1_000_000
-    _gpuTimeLiveData.postValue(duration)
-    _resultLiveData.postValue(result)
+    deferred.await()
+    return@withContext (System.nanoTime() - start) / 1_000_000
+}
+
+// GPU Benchmark utilise async pour orchestration non-bloquante
+private suspend fun benchmarkGpu(...): Pair<Long, Long> = withContext(Dispatchers.Default) {
+    val deferred = async {
+        gpuHelper.multiplyMatrices(matrixA, matrixB)
+    }
+    val (_, timings) = deferred.await()
+    return@withContext Pair(timings.totalMs, timings.computeMs)
 }
 ```
 
 ### AGSL Shader Example (Conceptual)
 ```glsl
-// matrix_multiply_half.agsl
+// matrix_multiply.agsl (Real Implementation)
 uniform shader inputA;
 uniform shader inputB;
-uniform half matrixSize; // matrixSize en half
+uniform float matrixSize;
 
-half4 main(half2 fragCoord) {
+half4 main(float2 fragCoord) {
     int row = int(fragCoord.y);
     int col = int(fragCoord.x);
-    half sum = 0.0h; // Utilisation du suffixe 'h' pour les littéraux half
+    float sum = 0.0;
     
-    for (int k = 0; k < int(matrixSize); k++) {
-        // .eval() échantillonne l'entrée, elle retourne un vec4 (ou half4 si optimisé)
-        half a = inputA.eval(half2(half(k), half(row))).r;
-        half b = inputB.eval(half2(half(col), half(k))).r;
+    int n = int(matrixSize);
+    for (int k = 0; k < n; k++) {
+        float a = inputA.eval(vec2(float(k) + 0.5, float(row) + 0.5)).r;
+        float b = inputB.eval(vec2(float(col) + 0.5, float(k) + 0.5)).r;
         sum += a * b;
     }
-    return half4(sum, 0.0h, 0.0h, 1.0h);
+    
+    // Normalize by matrixSize to keep in [0, 1] for 8-bit encoding
+    return half4(sum / matrixSize, 0.0, 0.0, 1.0);
 }
 ```
+
+**Why async for both CPU and GPU?**
+- **Fair comparison**: Same orchestration pattern for both approaches
+- **Measures coordination overhead**: Includes async/await cost in both benchmarks
+- **Architectural symmetry**: Consistent coroutine usage across implementations
+- **Non-blocking**: Main thread remains responsive during computation
+
+The key insight: We're not testing "raw CPU" vs "raw GPU", but **"CPU orchestrated via coroutines"** vs **"GPU orchestrated via coroutines"** - which is the actual real-world usage pattern.
 
 ---
 
@@ -297,13 +312,13 @@ half4 main(half2 fragCoord) {
 
 ### Phase 1: Core Implementation
 - [x] Document architecture and rationale
-- [ ] Implement CPU-only matrix multiplication with coroutines
-- [ ] Implement AGSL shader for matrix multiplication
-- [ ] Build Compose UI with side-by-side comparison
-- [ ] Add adjustable matrix size slider (64 → 1024)
+- [x] Implement CPU-only matrix multiplication with coroutines
+- [x] Implement AGSL shader for matrix multiplication
+- [x] Build Compose UI with side-by-side comparison
+- [x] Add adjustable matrix size slider (64 → 1024)
 
 ### Phase 2: Advanced Benchmarking
-- [ ] Measure breakdown: CPU time, GPU compute, transfer overhead
+- [x] Measure breakdown: CPU time, GPU compute, transfer overhead
 - [ ] Implement image convolution benchmark
 - [ ] Add batch processing comparison
 - [ ] Test GPU pipeline (chained operations)
@@ -317,6 +332,8 @@ half4 main(half2 fragCoord) {
 2. **Transfer overhead matters**—GPU only wins when compute cost >> transfer cost.
 3. **Hybrid approach is pragmatic**—leverage CPU for control, GPU for data crunching.
 4. **Profile everything**—assumptions about performance are often wrong.
+5. **Symmetric benchmarking matters**—Using `async` for both CPU and GPU ensures fair comparison by measuring the same orchestration overhead.
+6. **Coroutines are the coordination layer**—Both approaches use `async/await`, but GPU leverages thousands of hardware threads while CPU is limited to core count.
 
 This project demonstrates that understanding **when** and **how** to combine CPU and GPU computation is as important as the implementation itself.
 
