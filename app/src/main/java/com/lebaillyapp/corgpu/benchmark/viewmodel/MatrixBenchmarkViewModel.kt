@@ -1,171 +1,107 @@
 package com.lebaillyapp.corgpu.benchmark.viewmodel
 
 import android.app.Application
-import android.os.Build
-import androidx.annotation.RequiresApi
+import android.graphics.Bitmap
+import android.graphics.BitmapShader
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RuntimeShader
+import android.graphics.Shader
+import androidx.core.graphics.createBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.lebaillyapp.corgpu.benchmark.domain.gpu.GpuMatrixHelper
+import com.lebaillyapp.corgpu.benchmark.domain.gpu.MatrixTextureHelper
 import com.lebaillyapp.corgpu.benchmark.domain.model.MatrixBenchmarkResult
 import com.lebaillyapp.corgpu.benchmark.domain.model.MatrixBenchmarkState
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
+import kotlin.system.measureNanoTime
 
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class MatrixBenchmarkViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val gpuHelper = GpuMatrixHelper(application.applicationContext)
-
-    // État de l'UI
-    private val _state = MutableStateFlow<MatrixBenchmarkState>(MatrixBenchmarkState.Idle)
-    val state: StateFlow<MatrixBenchmarkState> = _state.asStateFlow()
-
-    // Historique des benchmarks pour le graphique
     private val benchmarkHistory = mutableListOf<MatrixBenchmarkResult>()
+    private val _state = MutableStateFlow<MatrixBenchmarkState>(MatrixBenchmarkState.Idle)
+    val state: StateFlow<MatrixBenchmarkState> = _state
 
-    /**
-     * Lance un benchmark complet : CPU vs GPU+Coroutines
-     */
-    fun runBenchmark(matrixSize: Int) {
-        if (_state.value is MatrixBenchmarkState.Computing) {
-            return // Déjà en cours
-        }
+    fun runBenchmark(size: Int) {
+        if (_state.value is MatrixBenchmarkState.Computing) return
 
         viewModelScope.launch {
             try {
-                _state.value = MatrixBenchmarkState.Computing(matrixSize)
+                _state.value = MatrixBenchmarkState.Computing(size)
 
-                // Génération des matrices aléatoires
-                val matrixA = generateRandomMatrix(matrixSize)
-                val matrixB = generateRandomMatrix(matrixSize)
+                val matrixA = generateRandomMatrix(size)
+                val matrixB = generateRandomMatrix(size)
+                val memoryMb = (size * size * 4 * 3) / (1024f * 1024f)
 
-                // Calcul mémoire allouée (approximatif)
-                val memoryMb = (matrixSize * matrixSize * 4 * 3) / (1024f * 1024f) // 3 matrices float32
-
-                // Benchmark CPU (coroutines avec async)
                 val cpuTime = benchmarkCpu(matrixA, matrixB)
+                val (gpuOut, gpuMs) = benchmarkGpuUnrolled(matrixA, matrixB)
 
-                // Benchmark GPU (coroutines + GPU avec async)
-                val (gpuTotalTime, gpuComputeTime) = benchmarkGpu(matrixA, matrixB)
-
-                // Créer le résultat
                 val result = MatrixBenchmarkResult(
-                    matrixSize = matrixSize,
+                    matrixSize = size,
                     cpuTimeMs = cpuTime,
-                    gpuTotalTimeMs = gpuTotalTime,
-                    gpuComputeTimeMs = gpuComputeTime,
+                    gpuTotalTimeMs = gpuMs,
+                    gpuComputeTimeMs = gpuMs,
                     memoryAllocatedMb = memoryMb
                 )
 
-                // Ajouter à l'historique
                 benchmarkHistory.add(result)
-
-                // Mettre à jour l'état
-                _state.value = MatrixBenchmarkState.Success(
-                    result = result,
-                    history = benchmarkHistory.toList()
-                )
-
+                _state.value = MatrixBenchmarkState.Success(result, benchmarkHistory.toList())
             } catch (e: Exception) {
-                _state.value = MatrixBenchmarkState.Error(
-                    message = e.message ?: "Unknown error",
-                    matrixSize = matrixSize
-                )
+                _state.value = MatrixBenchmarkState.Error(e.message ?: "Unknown error", size)
             }
         }
     }
 
-    /**
-     * Benchmark CPU : Multiplication naive en triple boucle avec async
-     * Utilise async pour comparaison équitable avec l'approche GPU
-     */
-    private suspend fun benchmarkCpu(
-        matrixA: Array<FloatArray>,
-        matrixB: Array<FloatArray>
-    ): Long = withContext(Dispatchers.Default) {
-        val startTime = System.nanoTime()
-
-        // Utiliser async pour orchestration similaire au GPU
-        val deferred = async {
+    private suspend fun benchmarkCpu(matrixA: Array<FloatArray>, matrixB: Array<FloatArray>): Long =
+        withContext(Dispatchers.Default) {
             val size = matrixA.size
             val result = Array(size) { FloatArray(size) }
-
-            // Multiplication matricielle naive O(n³)
-            for (i in 0 until size) {
-                for (j in 0 until size) {
-                    var sum = 0f
-                    for (k in 0 until size) {
-                        sum += matrixA[i][k] * matrixB[k][j]
+            val time = measureNanoTime {
+                for (i in 0 until size) {
+                    for (j in 0 until size) {
+                        var sum = 0f
+                        for (k in 0 until size) sum += matrixA[i][k] * matrixB[k][j]
+                        result[i][j] = sum
                     }
-                    result[i][j] = sum
                 }
             }
-            result
+            time / 1_000_000
         }
 
-        // Attendre le résultat (comme pour GPU)
-        deferred.await()
+    private suspend fun benchmarkGpuUnrolled(matrixA: Array<FloatArray>, matrixB: Array<FloatArray>): Pair<Array<FloatArray>, Long> =
+        withContext(Dispatchers.Default) {
+            val size = matrixA.size
+            val bmpA = MatrixTextureHelper.toFloat16Texture(matrixA, size)
+            val bmpB = MatrixTextureHelper.toFloat16Texture(matrixB, size)
+            val shaderSrc = this@MatrixBenchmarkViewModel::class.java
+                .classLoader!!
+                .getResource("matrix_multiply_unroll.agsl")!!
+                .readText()
 
-        val endTime = System.nanoTime()
-        return@withContext (endTime - startTime) / 1_000_000 // Convertir en ms
-    }
+            val shader = RuntimeShader(shaderSrc)
+            shader.setInputShader("texA", BitmapShader(bmpA, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP))
+            shader.setInputShader("texB", BitmapShader(bmpB, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP))
+            shader.setIntUniform("size", size)
 
-    /**
-     * Benchmark GPU : Délégation au shader via async
-     * Retourne (temps total, temps compute seul)
-     */
-    private suspend fun benchmarkGpu(
-        matrixA: Array<FloatArray>,
-        matrixB: Array<FloatArray>
-    ): Pair<Long, Long> = withContext(Dispatchers.Default) {
-        // Utiliser async pour orchestration non-bloquante
-        val deferred = async {
-            gpuHelper.multiplyMatrices(matrixA, matrixB)
+            val output = createBitmap(size, size, Bitmap.Config.RGBA_F16)
+            val gpuMs = measureNanoTime {
+                val canvas = Canvas(output)
+                val paint = Paint().apply { setShader(shader) }
+                canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), paint)
+            } / 1_000_000L
+
+            val result = MatrixTextureHelper.fromFloat16Texture(output, size)
+            result to gpuMs
         }
 
-        // Attendre le résultat
-        val (_, timings) = deferred.await()
+    private fun generateRandomMatrix(size: Int): Array<FloatArray> =
+        Array(size) { FloatArray(size) { Random.nextFloat() } }
 
-        return@withContext Pair(timings.totalMs, timings.computeMs)
-    }
-
-    /**
-     * Génère une matrice aléatoire NxN avec valeurs normalisées [0, 1]
-     */
-    private fun generateRandomMatrix(size: Int): Array<FloatArray> {
-        return Array(size) {
-            FloatArray(size) {
-                Random.nextFloat()
-            }
-        }
-    }
-
-    /**
-     * Reset l'état vers Idle
-     */
-    fun resetState() {
-        _state.value = MatrixBenchmarkState.Idle
-    }
-
-    /**
-     * Clear l'historique des benchmarks
-     */
-    fun clearHistory() {
-        benchmarkHistory.clear()
-        _state.value = MatrixBenchmarkState.Idle
-    }
-
-    /**
-     * Cleanup
-     */
-    override fun onCleared() {
-        super.onCleared()
-        gpuHelper.release()
-    }
+    fun resetState() { _state.value = MatrixBenchmarkState.Idle }
+    fun clearHistory() { benchmarkHistory.clear(); _state.value = MatrixBenchmarkState.Idle }
 }
