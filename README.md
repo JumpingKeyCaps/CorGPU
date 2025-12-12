@@ -326,6 +326,32 @@ The key insight: We're not testing "raw CPU" vs "raw GPU", but **"CPU orchestrat
 
 ---
 
+## Versions of the Matrix Multiplication Implementation
+
+This project includes three distinct implementations to explore different trade-offs between precision, performance, and shader optimizations:
+
+1. **Float16 Texture Shader**  
+   - Encodes matrices as `RGBA_F16` textures, storing values in the red channel.  
+   - Preserves better precision than 8-bit encoding.  
+   - Shader performs a straightforward triple-loop multiplication, one pixel per matrix element.  
+   - Suitable for mid-size matrices where precision matters.
+
+2. **8-bit Texture Shader (Legacy)**  
+   - Encodes matrices into 8-bit channels (`ARGB_8888`).  
+   - Lightweight but loses precision, may introduce rounding errors for large values.  
+   - Simpler pipeline, slightly faster for small matrices.  
+   - Mostly kept for historical comparison and performance baseline.
+
+3. **Unrolled Shader (`matrix_multiply_unroll.agsl`)**  
+   - Shader loop is unrolled by blocks of 4 to reduce loop overhead and improve GPU instruction throughput.  
+   - Handles remaining iterations if matrix size is not divisible by 4.  
+   - Works with float16 textures for better accuracy.  
+   - Best performance for large matrices (>256×256) where loop overhead impacts runtime.  
+
+**Key Insight:** Each version represents a trade-off between precision, shader complexity, and raw performance. Benchmarks allow you to see how loop unrolling and higher-precision textures affect GPU speed and accuracy compared to CPU coroutines.
+
+---
+
 ## Requirements
 
 - **Android 13+** (API 33) for AGSL shader support
