@@ -1,38 +1,30 @@
-// Matrix multiplication shader using AGSL (Android Graphics Shading Language)
-// Calcule C = A × B où toutes les matrices sont N×N
-// Entrées: matrices avec valeurs dans [0, 1]
-// Sortie: matrice normalisée par matrixSize pour rester dans [0, 1]
+uniform shader texA;
+uniform shader texB;
+uniform int size;
 
-uniform shader inputA;      // Matrice A (encodée en texture)
-uniform shader inputB;      // Matrice B (encodée en texture)
-uniform float matrixSize;   // Taille N des matrices
-
-// Fonction principale appelée pour chaque pixel de sortie
-// fragCoord.x = colonne, fragCoord.y = ligne
-half4 main(float2 fragCoord) {
+half4 main(vec2 fragCoord) {
     int row = int(fragCoord.y);
     int col = int(fragCoord.x);
-
-    // Accumulation du produit scalaire ligne × colonne
     float sum = 0.0;
+    float inv = 1.0 / float(size);
 
-    int n = int(matrixSize);
-    for (int k = 0; k < n; k++) {
-        // Lire A[row][k] - coordonnée (k, row)
-        float a = inputA.eval(vec2(float(k) + 0.5, float(row) + 0.5)).r;
-
-        // Lire B[k][col] - coordonnée (col, k)
-        float b = inputB.eval(vec2(float(col) + 0.5, float(k) + 0.5)).r;
-
-        sum += a * b;
+    // Unroll loop par bloc de 4
+    for (int k = 0; k < size / 4 * 4; k += 4) {
+        sum += texA.eval(vec2(float(k) * inv + 0.5*inv, float(row)*inv + 0.5*inv)).r *
+               texB.eval(vec2(float(col)*inv + 0.5*inv, float(k)*inv + 0.5*inv)).r;
+        sum += texA.eval(vec2(float(k+1) * inv + 0.5*inv, float(row)*inv + 0.5*inv)).r *
+               texB.eval(vec2(float(col)*inv + 0.5*inv, float(k+1)*inv + 0.5*inv)).r;
+        sum += texA.eval(vec2(float(k+2) * inv + 0.5*inv, float(row)*inv + 0.5*inv)).r *
+               texB.eval(vec2(float(col)*inv + 0.5*inv, float(k+2)*inv + 0.5*inv)).r;
+        sum += texA.eval(vec2(float(k+3) * inv + 0.5*inv, float(row)*inv + 0.5*inv)).r *
+               texB.eval(vec2(float(col)*inv + 0.5*inv, float(k+3)*inv + 0.5*inv)).r;
     }
 
-    // Normaliser le résultat par matrixSize pour garder dans [0, 1]
-    // Pour matrices d'entrée dans [0, 1], le résultat brut peut aller jusqu'à N
-    // En divisant par N, on ramène dans [0, 1] pour l'encodage 8-bit
-    float normalized = sum / matrixSize;
+    // Terminer les restants si size % 4 != 0
+    for (int k = size / 4 * 4; k < size; k++) {
+        sum += texA.eval(vec2(float(k) * inv + 0.5*inv, float(row)*inv + 0.5*inv)).r *
+               texB.eval(vec2(float(col)*inv + 0.5*inv, float(k)*inv + 0.5*inv)).r;
+    }
 
-    // Retourner le résultat normalisé dans le canal rouge
-    // Les autres canaux sont ignorés mais requis par AGSL
-    return half4(normalized, 0.0, 0.0, 1.0);
+    return half4(sum, 0.0, 0.0, 1.0);
 }
