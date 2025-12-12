@@ -1,3 +1,4 @@
+
 uniform shader texA;
 uniform shader texB;
 uniform int size;
@@ -8,22 +9,31 @@ half4 main(vec2 fragCoord) {
     float sum = 0.0;
     float inv = 1.0 / float(size);
 
+    // Précalculer les coordonnées constantes (optimization: évite recalculs redondants)
+    float rowCoord = float(row) * inv + 0.5 * inv;
+    float colCoord = float(col) * inv + 0.5 * inv;
+
     // Unroll loop par bloc de 4
-    for (int k = 0; k < size / 4 * 4; k += 4) {
-        sum += texA.eval(vec2(float(k) * inv + 0.5*inv, float(row)*inv + 0.5*inv)).r *
-               texB.eval(vec2(float(col)*inv + 0.5*inv, float(k)*inv + 0.5*inv)).r;
-        sum += texA.eval(vec2(float(k+1) * inv + 0.5*inv, float(row)*inv + 0.5*inv)).r *
-               texB.eval(vec2(float(col)*inv + 0.5*inv, float(k+1)*inv + 0.5*inv)).r;
-        sum += texA.eval(vec2(float(k+2) * inv + 0.5*inv, float(row)*inv + 0.5*inv)).r *
-               texB.eval(vec2(float(col)*inv + 0.5*inv, float(k+2)*inv + 0.5*inv)).r;
-        sum += texA.eval(vec2(float(k+3) * inv + 0.5*inv, float(row)*inv + 0.5*inv)).r *
-               texB.eval(vec2(float(col)*inv + 0.5*inv, float(k+3)*inv + 0.5*inv)).r;
+    int unrolledLimit = size / 4 * 4;
+    for (int k = 0; k < unrolledLimit; k += 4) {
+        // Précalculer les coordonnées k pour chaque itération
+        float k0 = float(k)   * inv + 0.5 * inv;
+        float k1 = float(k+1) * inv + 0.5 * inv;
+        float k2 = float(k+2) * inv + 0.5 * inv;
+        float k3 = float(k+3) * inv + 0.5 * inv;
+
+        // Accumulate (coordonnées optimisées)
+        sum += texA.eval(vec2(k0, rowCoord)).r * texB.eval(vec2(colCoord, k0)).r;
+        sum += texA.eval(vec2(k1, rowCoord)).r * texB.eval(vec2(colCoord, k1)).r;
+        sum += texA.eval(vec2(k2, rowCoord)).r * texB.eval(vec2(colCoord, k2)).r;
+        sum += texA.eval(vec2(k3, rowCoord)).r * texB.eval(vec2(colCoord, k3)).r;
     }
 
     // Terminer les restants si size % 4 != 0
-    for (int k = size / 4 * 4; k < size; k++) {
-        sum += texA.eval(vec2(float(k) * inv + 0.5*inv, float(row)*inv + 0.5*inv)).r *
-               texB.eval(vec2(float(col)*inv + 0.5*inv, float(k)*inv + 0.5*inv)).r;
+    for (int k = unrolledLimit; k < size; k++) {
+        float kCoord = float(k) * inv + 0.5 * inv;
+        sum += texA.eval(vec2(kCoord, rowCoord)).r *
+               texB.eval(vec2(colCoord, kCoord)).r;
     }
 
     return half4(sum, 0.0, 0.0, 1.0);
