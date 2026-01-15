@@ -1,38 +1,90 @@
-// Matrix multiplication shader using AGSL (Android Graphics Shading Language)
-// Calcule C = A × B où toutes les matrices sont N×N
-// Entrées: matrices avec valeurs dans [0, 1]
-// Sortie: matrice normalisée par matrixSize pour rester dans [0, 1]
+/**
+ * # Matrix Multiply Unrolled Shader (AGSL)
+ *
+ * GPU shader for multiplying two square matrices encoded as **RGBA_F16 textures**.
+ *
+ * ## Purpose
+ * - Perform matrix multiplication entirely on GPU
+ * - Each fragment computes a single element of the output matrix
+ * - Optimized for performance using:
+ *     - Loop unrolling (blocks of 4)
+ *     - Precomputed normalized coordinates
+ *     - Half precision (half4) output
+ *
+ * ## Inputs
+ * - `uniform shader texA` : texture representing matrix A
+ * - `uniform shader texB` : texture representing matrix B
+ * - `uniform int size` : width/height of square matrices
+ *
+ * ## Output
+ * - `half4`: only `.r` channel stores the resulting sum, `.g` and `.b` unused, `.a = 1.0`
+ *
+ * ## Optimizations / Subtleties
+ * 1. **Coordinate Normalization**:
+ *    - `inv = 1.0 / float(size)` converts integer indices to [0,1] range for texture evaluation
+ *    - Adds 0.5 * inv to sample at texel center (avoids filtering artifacts)
+ *
+ * 2. **Loop Unrolling**:
+ *    - Main loop processes 4 elements per iteration (`k`, `k+1`, `k+2`, `k+3`)
+ *    - Reduces loop overhead and helps compiler GPU unroll efficiently
+ *
+ * 3. **Precomputation**:
+ *    - Coordinates for `row` and `col` computed once per fragment
+ *    - Coordinates for `k` within unrolled loop precomputed to avoid repeated multiplications
+ *
+ * 4. **Residual Handling**:
+ *    - For `size % 4 != 0`, the remaining elements are handled in a separate loop
+ *
+ * 5. **Texture Sampling**:
+ *    - `texA.eval(vec2(kCoord, rowCoord)).r` and `texB.eval(vec2(colCoord, kCoord)).r`
+ *    - Only `.r` channel is used; GPU reads are float16
+ *
+ * 6. **Output Encoding**:
+ *    - Result stored in `.r` channel of `half4`
+ *    - `.g`, `.b` = 0.0, `.a` = 1.0 (alpha fully opaque)
+ *
+ * ## Notes
+ * - Accuracy depends on float16 precision
+ * - Designed for square matrices only
+ * - Coupled with `MatrixTextureHelper` in Kotlin for encoding/decoding textures
+ */
 
-uniform shader inputA;      // Matrice A (encodée en texture)
-uniform shader inputB;      // Matrice B (encodée en texture)
-uniform float matrixSize;   // Taille N des matrices
+uniform shader texA;
+uniform shader texB;
+uniform int size;
 
-// Fonction principale appelée pour chaque pixel de sortie
-// fragCoord.x = colonne, fragCoord.y = ligne
-half4 main(float2 fragCoord) {
+half4 main(vec2 fragCoord) {
     int row = int(fragCoord.y);
     int col = int(fragCoord.x);
-
-    // Accumulation du produit scalaire ligne × colonne
     float sum = 0.0;
+    float inv = 1.0 / float(size);
 
-    int n = int(matrixSize);
-    for (int k = 0; k < n; k++) {
-        // Lire A[row][k] - coordonnée (k, row)
-        float a = inputA.eval(vec2(float(k) + 0.5, float(row) + 0.5)).r;
+    // Précalculer les coordonnées constantes (optimization: évite recalculs redondants)
+    float rowCoord = float(row) * inv + 0.5 * inv;
+    float colCoord = float(col) * inv + 0.5 * inv;
 
-        // Lire B[k][col] - coordonnée (col, k)
-        float b = inputB.eval(vec2(float(col) + 0.5, float(k) + 0.5)).r;
+    // Unroll loop par bloc de 4
+    int unrolledLimit = size / 4 * 4;
+    for (int k = 0; k < unrolledLimit; k += 4) {
+        // Précalculer les coordonnées k pour chaque itération
+        float k0 = float(k)   * inv + 0.5 * inv;
+        float k1 = float(k+1) * inv + 0.5 * inv;
+        float k2 = float(k+2) * inv + 0.5 * inv;
+        float k3 = float(k+3) * inv + 0.5 * inv;
 
-        sum += a * b;
+        // Accumulate (coordonnées optimisées)
+        sum += texA.eval(vec2(k0, rowCoord)).r * texB.eval(vec2(colCoord, k0)).r;
+        sum += texA.eval(vec2(k1, rowCoord)).r * texB.eval(vec2(colCoord, k1)).r;
+        sum += texA.eval(vec2(k2, rowCoord)).r * texB.eval(vec2(colCoord, k2)).r;
+        sum += texA.eval(vec2(k3, rowCoord)).r * texB.eval(vec2(colCoord, k3)).r;
     }
 
-    // Normaliser le résultat par matrixSize pour garder dans [0, 1]
-    // Pour matrices d'entrée dans [0, 1], le résultat brut peut aller jusqu'à N
-    // En divisant par N, on ramène dans [0, 1] pour l'encodage 8-bit
-    float normalized = sum / matrixSize;
+    // Terminer les restants si size % 4 != 0
+    for (int k = unrolledLimit; k < size; k++) {
+        float kCoord = float(k) * inv + 0.5 * inv;
+        sum += texA.eval(vec2(kCoord, rowCoord)).r *
+               texB.eval(vec2(colCoord, kCoord)).r;
+    }
 
-    // Retourner le résultat normalisé dans le canal rouge
-    // Les autres canaux sont ignorés mais requis par AGSL
-    return half4(normalized, 0.0, 0.0, 1.0);
+    return half4(sum, 0.0, 0.0, 1.0);
 }

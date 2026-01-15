@@ -22,6 +22,43 @@ import com.lebaillyapp.corgpu.benchmark.ui.components.BenchmarkResultCard
 import com.lebaillyapp.corgpu.benchmark.ui.components.DetailedAnalysisSection
 import com.lebaillyapp.corgpu.benchmark.viewmodel.MatrixBenchmarkViewModel
 
+
+/**
+ * # MatrixBenchmarkScreen
+ *
+ * Main UI screen for the **CorGPU benchmarking tool**.
+ *
+ * ## Responsibilities
+ * - Allow users to select **matrix size** for the benchmark
+ * - Start benchmark via ViewModel and observe state updates
+ * - Display **current progress**, **results**, and **errors**
+ * - Aggregate all subcomponents: Tabs, Slider, Cards, Detailed Analysis, Logs
+ *
+ * ## Structure
+ * 1. **TopAppBar** with screen title
+ * 2. **TabSection** for potential benchmark modes (matrix multiplication, image convolution, batch ops)
+ * 3. **MatrixSizeSlider**: allows selecting matrix size (64–1024)
+ * 4. Dynamic content based on `MatrixBenchmarkState`:
+ *      - Idle → Run button
+ *      - Computing → Progress indicator
+ *      - Success → Result cards, speedup message, detailed analysis, logs
+ *      - Error → Error message and retry button
+ *
+ * ## State Management
+ * - Observes `viewModel.state` via `collectAsStateWithLifecycle`
+ * - Matrix size stored in local state, reset when a new benchmark is launched
+ * - Buttons and slider **disabled during computing**
+ *
+ * ## Notes / Subtleties
+ * - Uses **AnimatedVisibility** for smooth transition between results
+ * - All UI colors use dark theme with highlighted accent colors (CPU=blue, GPU=green)
+ * - Logs use monospace font for readability
+ * - UI is scrollable to accommodate long histories and detailed sections
+ * - Chart section is **currently optional** (commented out if history < 2)
+ *
+ * @param viewModel The ViewModel responsible for benchmark logic and state
+ * @param modifier Optional Compose Modifier for layout adjustments
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MatrixBenchmarkScreen(
@@ -100,6 +137,14 @@ fun MatrixBenchmarkScreen(
     }
 }
 
+
+/**
+ * # TabSection
+ *
+ * Displays a horizontal row of mode tabs.
+ * Currently, only "Matrix Mult." is enabled.
+ * Tabs use color to indicate selection state.
+ */
 @Composable
 private fun TabSection() {
     Surface(
@@ -131,6 +176,13 @@ private fun TabSection() {
     }
 }
 
+
+/**
+ * # TabButton
+ *
+ * Represents a single tab with selectable state.
+ * Uses rounded corners and color differentiation.
+ */
 @Composable
 private fun TabButton(
     text: String,
@@ -154,6 +206,17 @@ private fun TabButton(
     }
 }
 
+/**
+ * # MatrixSizeSlider
+ *
+ * Slider for choosing the matrix size (64–1024).
+ * Steps correspond to multiples of 64.
+ *
+ * ## Notes
+ * - Disabled while a benchmark is running
+ * - Displays the current size above the slider
+ * - Uses green accent color
+ */
 @Composable
 private fun MatrixSizeSlider(
     size: Int,
@@ -185,6 +248,13 @@ private fun MatrixSizeSlider(
     }
 }
 
+/**
+ * # RunBenchmarkButton
+ *
+ * Button to launch a benchmark.
+ * Disabled while benchmark is running.
+ * Large bold text with green accent.
+ */
 @Composable
 private fun RunBenchmarkButton(onClick: () -> Unit) {
     Button(
@@ -205,6 +275,12 @@ private fun RunBenchmarkButton(onClick: () -> Unit) {
     }
 }
 
+/**
+ * # ComputingProgress
+ *
+ * Displays **progress indicator** and matrix size while benchmark runs.
+ * Blue accent for consistency with CPU results.
+ */
 @Composable
 private fun ComputingProgress(matrixSize: Int) {
     Column(
@@ -231,6 +307,22 @@ private fun ComputingProgress(matrixSize: Int) {
     }
 }
 
+/**
+ * # ResultsSection
+ *
+ * Shows benchmark results after successful computation.
+ *
+ * Includes:
+ * - Performance cards (CPU vs GPU)
+ * - Speedup message
+ * - Scalability chart (if enough history)
+ * - Detailed analysis
+ * - Logs
+ *
+ * ## Notes
+ * - Uses AnimatedVisibility for smooth appearance
+ * - History must contain >= 2 results to show chart
+ */
 @Composable
 private fun ResultsSection(
     result: MatrixBenchmarkResult,
@@ -294,6 +386,11 @@ private fun ResultsSection(
     }
 }
 
+/**
+ * # LogsSection
+ *
+ * Displays benchmark logs in a monospace box with dark background.
+ */
 @Composable
 private fun LogsSection(log: String) {
     Surface(
@@ -311,6 +408,13 @@ private fun LogsSection(log: String) {
     }
 }
 
+
+/**
+ * # ErrorSection
+ *
+ * Shows error message and retry button when benchmark fails.
+ * Red accent color for error emphasis.
+ */
 @Composable
 private fun ErrorSection(
     message: String,
