@@ -1,3 +1,53 @@
+/**
+ * # Matrix Multiply Unrolled Shader (AGSL)
+ *
+ * GPU shader for multiplying two square matrices encoded as **RGBA_F16 textures**.
+ *
+ * ## Purpose
+ * - Perform matrix multiplication entirely on GPU
+ * - Each fragment computes a single element of the output matrix
+ * - Optimized for performance using:
+ *     - Loop unrolling (blocks of 4)
+ *     - Precomputed normalized coordinates
+ *     - Half precision (half4) output
+ *
+ * ## Inputs
+ * - `uniform shader texA` : texture representing matrix A
+ * - `uniform shader texB` : texture representing matrix B
+ * - `uniform int size` : width/height of square matrices
+ *
+ * ## Output
+ * - `half4`: only `.r` channel stores the resulting sum, `.g` and `.b` unused, `.a = 1.0`
+ *
+ * ## Optimizations / Subtleties
+ * 1. **Coordinate Normalization**:
+ *    - `inv = 1.0 / float(size)` converts integer indices to [0,1] range for texture evaluation
+ *    - Adds 0.5 * inv to sample at texel center (avoids filtering artifacts)
+ *
+ * 2. **Loop Unrolling**:
+ *    - Main loop processes 4 elements per iteration (`k`, `k+1`, `k+2`, `k+3`)
+ *    - Reduces loop overhead and helps compiler GPU unroll efficiently
+ *
+ * 3. **Precomputation**:
+ *    - Coordinates for `row` and `col` computed once per fragment
+ *    - Coordinates for `k` within unrolled loop precomputed to avoid repeated multiplications
+ *
+ * 4. **Residual Handling**:
+ *    - For `size % 4 != 0`, the remaining elements are handled in a separate loop
+ *
+ * 5. **Texture Sampling**:
+ *    - `texA.eval(vec2(kCoord, rowCoord)).r` and `texB.eval(vec2(colCoord, kCoord)).r`
+ *    - Only `.r` channel is used; GPU reads are float16
+ *
+ * 6. **Output Encoding**:
+ *    - Result stored in `.r` channel of `half4`
+ *    - `.g`, `.b` = 0.0, `.a` = 1.0 (alpha fully opaque)
+ *
+ * ## Notes
+ * - Accuracy depends on float16 precision
+ * - Designed for square matrices only
+ * - Coupled with `MatrixTextureHelper` in Kotlin for encoding/decoding textures
+ */
 
 uniform shader texA;
 uniform shader texB;
