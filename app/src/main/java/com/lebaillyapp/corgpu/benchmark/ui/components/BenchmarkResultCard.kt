@@ -17,6 +17,40 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+
+/**
+ * # BenchmarkResultCard
+ *
+ * A composable to display **individual benchmark results** in a card format.
+ *
+ * ## Purpose
+ * - Show benchmark title (CPU/GPU) with an icon
+ * - Display execution time in milliseconds prominently
+ * - Provide a simple visual bar to indicate relative performance
+ * - Color-coded to match CPU/GPU distinction
+ *
+ * ## Design Notes
+ * 1. Uses a fixed **height (140.dp)** and rounded corners for UI consistency
+ * 2. Card background is dark (`0xFF1E1E1E`) to emphasize colored highlights
+ * 3. Top row includes an icon (`Settings`) as a placeholder for future status/action
+ * 4. Execution time uses **large, bold font (32.sp)** to draw attention
+ * 5. Visual bar:
+ *    - Background: `0xFF2A2A2A` (dark gray)
+ *    - Foreground: colored bar proportional to value (here hardcoded 80%)
+ *    - Rounded corners for aesthetics
+ *
+ * ## Parameters
+ * @param title Title text (e.g., "CPU Time" or "GPU Time")
+ * @param timeMs Execution time in milliseconds
+ * @param color Primary color for text, icon, and progress bar
+ * @param modifier Optional Modifier for further layout adjustments
+ *
+ * ## Notes on Subtleties
+ * - Hardcoded fill ratio (`0.8f`) in progress bar is currently **static**
+ *   for demo purposes; can be updated dynamically based on max benchmark value
+ * - Icon is a **visual cue**, not interactive
+ * - Card is **self-contained**; does not require external state
+ */
 @Composable
 fun BenchmarkResultCard(
     title: String,
